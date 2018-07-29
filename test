@@ -1,0 +1,72 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Jul 16 15:31:58 2017
+
+@author: GDeMichele
+"""
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
+import matplotlib.pyplot as plt
+import glob
+
+
+
+
+start_time = '2017-01-01 01:00'
+end_time = '2018-01-01'
+
+
+times = pd.date_range(start_time, end_time, freq="H")
+
+pts_col = ["x","y","z", "dx","dy","dz"]
+pts = pd.read_csv("points.pts", sep="\t", header=None, names=pts_col )
+
+average = pd.DataFrame(columns=('DA', 'UDI<100', '100<UDI<300','300<UDI<3000','UDI>3000'))
+
+for of in glob.glob('T1_nocontrol.ill'):
+    print(of)
+    
+    shade = pd.read_csv(of, sep='\t')
+    
+#    shade.drop(shade.columns[len(shade.columns)-1], axis=1, inplace=True) 
+#    shade.columns = ["Sensor_%i [lux]" % i for i in range(1,len(shade.columns)+1)]
+    
+    shade = shade.set_index(times) 
+    pts = pts.set_index(shade.columns) 
+    data = shade.between_time('9:00', '18:00')    
+    l = len(data)
+    
+    # definiesco i valori per il calcolo dell daylight autonomy
+    dla_treshold = 300
+    dla = data.ge(dla_treshold).sum()/l*100  
+    #definisco i valori limite per gli indici UDI  
+    udi100 = data.lt(100).sum()/l*100
+    udi100_300 = ((data.ge(100))&(data.le(300))).sum()/l*100
+    udi300_3000 = ((data.ge(300))&(data.le(3000))).sum()/l*100
+    udi3000 = data.gt(3000).sum()/l*100
+    
+    #creo un nuovo data frame con le Series di risultati che ho trovato 
+    dfA = pd.DataFrame(dla, columns=['DA '+str(dla_treshold)])
+    dfB = pd.DataFrame(udi100, columns=['UDI<100'])
+    dfB2 = pd.DataFrame(udi100_300, columns=['100<UDI<300'])
+    dfC = pd.DataFrame(udi300_3000, columns=['300<UDI<3000'])
+    dfD = pd.DataFrame(udi3000, columns=['UDI>3000'])
+    
+    results = pd.concat([dfA,dfB,dfB2,dfC,dfD,pts], join='outer', axis=1)
+    
+    dla_avg = dla.mean()
+    udi100_avg = udi100.mean()
+    udi100_300_avg = udi100_300.mean()
+    udi300_3000_avg = udi300_3000.mean()
+    udi3000_avg = udi3000.mean()
+ 
+    average.loc[of] = [dla_avg,udi100_avg,udi100_300_avg,udi300_3000_avg,udi3000_avg]
+
+
+    results.to_csv('results_'+of.replace(".ill",".dat"), sep='\t')
+
+average.to_csv("DGP_Results.csv")
